@@ -1,1 +1,231 @@
+struct SensorData {
 
+  long ultraDist;
+
+  bool irDetected;
+
+  bool ultraValid;
+
+};
+
+ 
+
+// 핀 설정
+
+int motorA1 = 9, motorA2 = 10;
+
+int motorB1 = 6, motorB2 = 7;
+
+int trigPin = 3, echoPin = 2;
+
+int irPin = 4;
+
+ 
+
+int targetDist = 20;
+
+bool done = false;
+
+unsigned long lastUltraTime = 0;
+
+ 
+
+void setup() {
+
+  Serial.begin(9600);
+
+  pinMode(motorA1, OUTPUT);
+
+  pinMode(motorA2, OUTPUT);
+
+  pinMode(motorB1, OUTPUT);
+
+  pinMode(motorB2, OUTPUT);
+
+  pinMode(trigPin, OUTPUT);
+
+  pinMode(echoPin, INPUT);
+
+  pinMode(irPin, INPUT);
+
+  stopCar();
+
+  Serial.println("=== 센서 융합 비상제동 ===");
+
+  Serial.println("초음파(거리) + 적외선(감지)");
+
+  for(int i = 3; i > 0; i--) {
+
+    Serial.println(String(i) + "초...");
+
+    delay(1000);
+
+  }
+
+  Serial.println("전진!");
+
+  moveForward();
+
+}
+
+ 
+
+void loop() {
+
+  if(!done) {
+
+    SensorData data = getSensorData();
+
+    printStatus(data);
+
+    if(shouldStop(data)) {
+
+      Serial.println("\n[system] : 위험 감지! 정지!");
+
+      stopCar();
+
+      delay(2000);
+
+      SensorData final = getSensorData();
+
+      printResult(final);
+
+      done = true;
+
+    }
+
+    delay(50);
+
+  }
+
+}
+
+ 
+
+SensorData getSensorData() {
+
+  SensorData data;
+
+  if(millis() - lastUltraTime >= 50) {
+
+    data.ultraDist = getUltraDist();
+
+    data.ultraValid = (data.ultraDist > 0);
+
+    lastUltraTime = millis();
+
+  } else {
+
+    data.ultraDist = -1;
+
+    data.ultraValid = false;
+
+  }
+
+  data.irDetected = (digitalRead(irPin) == LOW);
+
+  return data;
+
+}
+
+ 
+
+bool shouldStop(SensorData data) {
+
+  bool ultraTrig = (data.ultraValid && data.ultraDist <= targetDist);
+
+  bool irTrig = data.irDetected;
+
+  return (ultraTrig && irTrig); // AND 융합
+
+}
+
+ 
+
+void printStatus(SensorData data) {
+
+  Serial.print("초음파: ");
+
+  if(data.ultraValid) {
+
+    Serial.print(String(data.ultraDist) + "cm");
+
+    if(data.ultraDist <= targetDist) Serial.print(" [위험]");
+
+  } else {
+
+    Serial.print("측정중");
+
+  }
+
+  Serial.print(" | 적외선: ");
+
+  Serial.println(data.irDetected ? "감지 [위험]" : "미감지");
+
+}
+
+ 
+
+void printResult(SensorData data) {
+
+  Serial.println("\n=== 결과 ===");
+
+  Serial.println("초음파: " + String(data.ultraValid ? String(data.ultraDist) + "cm" : "측정불가"));
+
+  Serial.println("적외선: " + String(data.irDetected ? "감지" : "미감지"));
+
+  Serial.println("RESULT_ULTRASONIC: " + String(data.ultraDist));
+
+  Serial.println("RESULT_INFRARED: " + String(data.irDetected ? "DETECTED" : "NOT_DETECTED"));
+
+}
+
+ 
+
+void moveForward() {
+
+  digitalWrite(motorA1, HIGH);
+
+  digitalWrite(motorA2, LOW);
+
+  digitalWrite(motorB1, HIGH);
+
+  digitalWrite(motorB2, LOW);
+
+}
+
+ 
+
+void stopCar() {
+
+  digitalWrite(motorA1, LOW);
+
+  digitalWrite(motorA2, LOW);
+
+  digitalWrite(motorB1, LOW);
+
+  digitalWrite(motorB2, LOW);
+
+}
+
+ 
+
+long getUltraDist() {
+
+  digitalWrite(trigPin, LOW);
+
+  delayMicroseconds(2);
+
+  digitalWrite(trigPin, HIGH);
+
+  delayMicroseconds(10);
+
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH);
+
+  long dist = (duration * 0.034) / 2;
+
+  return (dist < 2 || dist > 400) ? -1 : dist;
+
+}
